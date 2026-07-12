@@ -21,12 +21,14 @@ class CloudWsClient:
         *,
         queue_size: int = 2,
         reconnect_seconds: float = 2.0,
+        expect_response: bool = False,
         on_result: Optional[ResultFn] = None,
         on_log: Optional[LogFn] = None,
     ) -> None:
         self._url = url
         self._queue: queue.Queue = queue.Queue(maxsize=queue_size)
         self._reconnect_seconds = reconnect_seconds
+        self._expect_response = expect_response
         self._on_result = on_result
         self._on_log = on_log or (lambda _msg: None)
         self._stop = threading.Event()
@@ -81,11 +83,14 @@ class CloudWsClient:
                 continue
 
             ws.send(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
-            raw = ws.recv()
-            if not raw:
-                continue
+            car_id = payload.get("car_id", "unknown")
+            self._on_log(f"frame sent to cloud for car_id={car_id}")
+            if self._expect_response:
+                raw = ws.recv()
+                if not raw:
+                    continue
 
-            result = json.loads(raw)
-            if isinstance(result, dict) and self._on_result:
-                self._on_result(result)
+                result = json.loads(raw)
+                if isinstance(result, dict) and self._on_result:
+                    self._on_result(result)
             time.sleep(0)

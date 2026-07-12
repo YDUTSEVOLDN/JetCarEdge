@@ -9,7 +9,7 @@ from sensor_msgs.msg import Image, Imu, LaserScan
 from std_msgs.msg import Bool, Empty, String
 
 from jetcar_edge.image_codec import ImageCodec
-from jetcar_edge.models import EdgeFrame
+from jetcar_edge.models import VideoFrameUpload
 from jetcar_edge.safety import SafetyMonitor
 from jetcar_edge.sensor_buffer import SensorBuffer
 from jetcar_edge.ws_client import CloudWsClient
@@ -20,7 +20,10 @@ class EdgeUploadNode(Node):
         super().__init__("jetcar_edge_upload")
 
         self.declare_parameter("car_id", "car_001")
-        self.declare_parameter("cloud_url", "ws://192.168.137.1:8000/ws/inference/car_001/edge")
+        self.declare_parameter(
+            "cloud_url",
+            "ws://192.168.137.1:8000/ws/video/car_001/camera_front/edge?algorithm_id=yolov5-similarity",
+        )
         self.declare_parameter("camera_topic", "/camera/image_raw")
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("imu_topic", "/imu/data")
@@ -96,6 +99,7 @@ class EdgeUploadNode(Node):
             str(self.get_parameter("cloud_url").value),
             queue_size=int(self.get_parameter("queue_size").value),
             reconnect_seconds=float(self.get_parameter("reconnect_seconds").value),
+            expect_response=False,
             on_result=self._on_cloud_result,
             on_log=lambda msg: self.get_logger().info(msg),
         )
@@ -126,16 +130,14 @@ class EdgeUploadNode(Node):
 
         try:
             encoded = self._codec.encode(msg)
-            stamp = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) / 1_000_000_000.0
-            if stamp <= 0:
-                stamp = time.time()
-            frame = EdgeFrame(
+            frame = VideoFrameUpload(
                 car_id=str(self._car_id),
-                timestamp=stamp,
                 image=encoded,
-                sensors=self._sensors.snapshot(),
             )
             self._cloud.submit(frame.to_dict())
+            self.get_logger().info(
+                f"frame queued for cloud upload: {encoded.width}x{encoded.height}"
+            )
         except Exception as exc:
             self.get_logger().warning(f"failed to process camera frame: {exc}")
 

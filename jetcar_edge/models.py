@@ -35,3 +35,15 @@ class EdgeFrame:
             "image": self.image.to_dict(),
             "sensors": self.sensors,
         }
+
+
+@dataclass(frozen=True)
+class VideoFrameUpload:
+    car_id: str
+    image: EncodedImage
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "car_id": self.car_id,
+            "image": self.image.to_dict(),
+        }
