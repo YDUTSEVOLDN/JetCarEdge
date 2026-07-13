@@ -3,9 +3,8 @@ from __future__ import annotations
 import shlex
 import subprocess
 import threading
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 
 LogFn = Callable[[str], None]

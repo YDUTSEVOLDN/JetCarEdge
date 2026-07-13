@@ -52,7 +52,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("stream_id", default_value="camera_front"),
             DeclareLaunchArgument(
                 "cloud_url",
-                default_value="ws://192.168.137.126:8000/ws/video/car_001/camera_front/edge",
+                default_value="ws://192.168.175.90:8000/ws/video/car_001/camera_front/edge",
             ),
             DeclareLaunchArgument("camera_topic", default_value="/camera/color/image_raw"),
             DeclareLaunchArgument("start_camera", default_value="true"),

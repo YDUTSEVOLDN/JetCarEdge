@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Optional
 
 from geometry_msgs.msg import Twist
 
@@ -35,7 +34,7 @@ class VisualServoController:
         config: VisualServoConfig,
         sensor_buffer: SensorBuffer,
         cmd_pub,
-        on_log: LogFn | None = None,
+        on_log: Optional[LogFn] = None,
     ) -> None:
         self._config = config
         self._sensors = sensor_buffer

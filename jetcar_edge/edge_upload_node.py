@@ -32,7 +32,7 @@ class EdgeUploadNode(Node):
 
         self.declare_parameter("car_id", "car_001")
         self.declare_parameter("stream_id", "camera_front")
-        self.declare_parameter("cloud_host", "192.168.137.1")
+        self.declare_parameter("cloud_host", "192.168.175.90")
         self.declare_parameter("cloud_port", 8000)
         self.declare_parameter("cloud_discovery_enabled", False)
         self.declare_parameter("cloud_discovery_port", 8765)

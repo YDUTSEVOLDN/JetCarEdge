@@ -4,8 +4,7 @@ import json
 import queue
 import threading
 import time
-from collections.abc import Callable
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import websocket
 

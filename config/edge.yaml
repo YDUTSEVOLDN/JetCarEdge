@@ -1,6 +1,6 @@
 car_id: car_001
 stream_id: camera_front
-cloud_host: 192.168.137.1
+cloud_host: 192.168.175.90
 cloud_port: 8000
 cloud_discovery_enabled: false
 cloud_discovery_port: 8765
@@ -8,7 +8,7 @@ cloud_discovery_listen_seconds: 2.0
 cloud_discovery_service: JetCarCloud
 algorithm_ids: []
 cloud_url: ""
-camera_topic: /camera/image_raw
+camera_topic: /camera/color/image_raw
 scan_topic: /scan
 imu_topic: /imu/data
 ai_enable_topic: /jetcar/ai_enable
