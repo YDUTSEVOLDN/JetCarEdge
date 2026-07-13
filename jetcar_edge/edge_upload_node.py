@@ -59,6 +59,7 @@ class EdgeUploadNode(Node):
         self.declare_parameter("snapshot_topic", "/jetcar/snapshot")
         self.declare_parameter("ai_result_topic", "/jetcar/ai_result")
         self.declare_parameter("emergency_stop_topic", "/jetcar/emergency_stop")
+        self.declare_parameter("task_status_topic", "/jetcar/task_status")
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("upload_fps", 5.0)
         self.declare_parameter("image_width", 640)
@@ -164,6 +165,12 @@ class EdgeUploadNode(Node):
             10,
         )
         self.create_subscription(
+            String,
+            str(self.get_parameter("task_status_topic").value),
+            self._on_task_status,
+            10,
+        )
+        self.create_subscription(
             Image,
             str(self.get_parameter("camera_topic").value),
             self._on_image,
@@ -252,8 +259,22 @@ class EdgeUploadNode(Node):
         algorithms = self._parse_algorithm_text(msg.data)
         if not algorithms:
             self._set_ai_algorithms([], reason="ros_algorithm_ids_empty")
+            self._similarity_controller.stop(reason="ros_algorithm_ids_empty")
             return
         self._set_ai_algorithms(algorithms, reason="ros_algorithm_ids")
+        if "yolov5-similarity" in algorithms:
+            self._similarity_controller.start()
+        else:
+            self._similarity_controller.stop(reason="ros_algorithm_ids_without_similarity")
+
+    def _on_task_status(self, msg: String) -> None:
+        try:
+            payload = json.loads(msg.data)
+            if not isinstance(payload, dict):
+                return
+        except json.JSONDecodeError:
+            return
+        self._report_edge_event("task_status", payload)
 
     def _set_ai_enabled(self, enabled: bool, *, reason: str) -> None:
         if self._upload_enabled == enabled:
@@ -369,6 +390,7 @@ class EdgeUploadNode(Node):
             "search_stopped",
             "search_warning",
             "motion_update",
+            "task_status",
         }:
             return
         threading.Thread(

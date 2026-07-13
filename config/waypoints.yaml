@@ -1,0 +1,38 @@
+inspection:
+  - label: inspection_start
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+    hold_seconds: 1.0
+  - label: inspection_lane_1
+    x: 1.0
+    y: 0.0
+    yaw: 0.0
+    hold_seconds: 1.5
+  - label: inspection_lane_2
+    x: 1.0
+    y: 1.0
+    yaw: 1.57
+    hold_seconds: 1.5
+  - label: inspection_return
+    x: 0.0
+    y: 1.0
+    yaw: 3.14
+    hold_seconds: 1.0
+
+search:
+  - label: search_origin
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+    hold_seconds: 1.0
+  - label: search_left
+    x: 0.8
+    y: 0.5
+    yaw: 0.0
+    hold_seconds: 1.0
+  - label: search_right
+    x: 0.8
+    y: -0.5
+    yaw: 0.0
+    hold_seconds: 1.0
