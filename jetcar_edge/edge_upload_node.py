@@ -4,6 +4,7 @@ import json
 import socketserver
 import threading
 import time
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from geometry_msgs.msg import Twist
 import rclpy
@@ -318,7 +319,7 @@ class EdgeUploadNode(Node):
     def _cloud_url(self) -> str:
         explicit = str(self.get_parameter("cloud_url").value).strip()
         if explicit:
-            return explicit
+            return self._with_algorithm_query(explicit)
         host = self._cloud_host
         port = int(self.get_parameter("cloud_port").value)
         algorithms = ",".join(self._algorithm_ids)
@@ -417,6 +418,27 @@ class EdgeUploadNode(Node):
         if bool(self.get_parameter("cloud_discovery_enabled").value):
             self.get_logger().warning(f"cloud discovery timed out; using configured host {configured}")
         return configured
+
+    def _with_algorithm_query(self, url: str) -> str:
+        algorithms = ",".join(self._algorithm_ids)
+        parts = urlsplit(url)
+        query = {
+            key: value
+            for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            if key not in {"algorithm_id", "algorithm_ids", "algorithms", "include_image"}
+        }
+        if algorithms:
+            query["algorithm_ids"] = algorithms
+        query["include_image"] = "true"
+        return urlunsplit(
+            (
+                parts.scheme,
+                parts.netloc,
+                parts.path,
+                urlencode(query),
+                parts.fragment,
+            )
+        )
 
     def _parse_algorithm_text(self, value: str) -> list[str]:
         text = value.strip()

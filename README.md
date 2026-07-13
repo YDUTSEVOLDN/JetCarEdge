@@ -112,6 +112,48 @@ ros2 run jetcar_edge edge_upload_node \
   -p imu_topic:=/imu/data
 ```
 
+For the current `jetcar_auto` container workflow, start camera and Edge manually
+inside the container. Keep `docker_orchestrator_enabled=false` because this node
+is already running inside the container and should not call `docker exec` on
+itself:
+
+```bash
+docker start jetcar_auto
+docker exec -it jetcar_auto bash
+
+export ROS_DOMAIN_ID=30
+source /opt/ros/foxy/setup.bash
+cd /workspace
+source install/setup.bash
+```
+
+Terminal A, camera:
+
+```bash
+export ROS_DOMAIN_ID=30
+source /opt/ros/foxy/setup.bash
+ros2 launch astra_camera astro_pro_plus.launch.xml enable_color:=true enable_depth:=false
+```
+
+Terminal B, Edge:
+
+```bash
+export ROS_DOMAIN_ID=30
+source /opt/ros/foxy/setup.bash
+cd /workspace
+source install/setup.bash
+ros2 run jetcar_edge edge_upload_node --ros-args \
+  -p car_id:=car_001 \
+  -p stream_id:=camera_front \
+  -p cloud_url:=ws://192.168.137.126:8000/ws/video/car_001/camera_front/edge \
+  -p camera_topic:=/camera/color/image_raw \
+  -p docker_orchestrator_enabled:=false
+```
+
+`cloud_url` may omit `algorithm_ids`; the node rewrites the query string when
+the phone changes modes. For similarity, the phone/Edge control port will switch
+the upload URL to `algorithm_ids=yolov5-similarity`.
+
 The node builds this Cloud upload URL automatically:
 
 ```text
@@ -163,6 +205,18 @@ Similarity search uses:
 
 ```json
 {"type":"jetcar_ai_control","mode":"similarity","algorithm_ids":["yolov5-similarity"],"car_id":"car_001","stream_id":"camera_front"}
+```
+
+Manual similarity control test from inside the container:
+
+```bash
+printf '{"type":"jetcar_ai_control","mode":"similarity","car_id":"car_001","stream_id":"camera_front","algorithm_ids":["yolov5-similarity"]}\n' | nc 127.0.0.1 6001
+```
+
+Stop AI upload:
+
+```bash
+printf '{"type":"jetcar_ai_control","mode":"off","car_id":"car_001","stream_id":"camera_front","algorithm_ids":[]}\n' | nc 127.0.0.1 6001
 ```
 
 For automatic similarity search, Edge can call the existing Docker/ROS programs
