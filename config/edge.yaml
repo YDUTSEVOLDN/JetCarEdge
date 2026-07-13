@@ -29,11 +29,19 @@ danger_distance_m: 1.5
 reconnect_seconds: 2.0
 docker_orchestrator_enabled: false
 docker_executable: docker
+docker_command_prefix: ""
 autodrive_container: ""
+# These commands come from the Jetson manual and may need adjustment on the real
+# car. Verify package names, workspace setup scripts, and topics inside the
+# container before enabling docker_orchestrator_enabled.
 similarity_search_programs:
   - ros2 run icar_bringup Mcnamu_driver_X3
   - ros2 launch sllidar_ros2 sllidar_launch.py
   - ros2 launch astra_camera astra.launch.xml
+# Optional manual programs, not enabled by default:
+# - ros2 run icar_laser laser_Avoidance_a1_X3
+# - ros2 run icar_astra colorHSV
+# - ros2 run icar_astra colorTracker
 similarity_match_threshold: 0.45
 similarity_auto_stop_on_match: true
 similarity_motion_enabled: true

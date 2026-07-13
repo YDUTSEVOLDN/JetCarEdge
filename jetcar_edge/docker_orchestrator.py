@@ -25,12 +25,14 @@ class DockerOrchestrator:
         container: str,
         programs: list[DockerProgram],
         docker_executable: str = "docker",
+        command_prefix: str = "",
         enabled: bool = False,
         on_log: Optional[LogFn] = None,
     ) -> None:
         self._container = container
         self._programs = programs
         self._docker = docker_executable
+        self._command_prefix = command_prefix.strip()
         self._enabled = enabled and bool(container)
         self._on_log = on_log or (lambda _msg: None)
         self._lock = threading.Lock()
@@ -49,6 +51,9 @@ class DockerOrchestrator:
                 return
             self._run([self._docker, "start", self._container], required=True)
             for item in self._programs:
+                command = item.command
+                if self._command_prefix:
+                    command = f"{self._command_prefix} && {command}"
                 self._run(
                     [
                         self._docker,
@@ -57,7 +62,7 @@ class DockerOrchestrator:
                         self._container,
                         "bash",
                         "-lc",
-                        item.command,
+                        command,
                     ],
                     required=item.required,
                 )

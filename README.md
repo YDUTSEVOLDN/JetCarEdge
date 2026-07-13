@@ -33,7 +33,7 @@ JetCarEdge/
     motion_controller.py    Similarity visual-servo target alignment/approach
     cloud_discovery.py      Optional UDP Cloud IP discovery
   config/
-    edge.example.yaml       Example runtime configuration
+    edge.yaml               Runtime configuration
   resource/
     jetcar_edge             ROS2 ament marker
   package.xml               ROS2 package metadata
@@ -172,10 +172,10 @@ from the Jetson operation manual. Fill the real container name or ID prefix in
 ```yaml
 docker_orchestrator_enabled: true
 autodrive_container: "2169"
+docker_command_prefix: "source /opt/ros/foxy/setup.bash"
 similarity_search_programs:
   - ros2 run icar_bringup Mcnamu_driver_X3
   - ros2 launch sllidar_ros2 sllidar_launch.py
-  - ros2 run icar_laser laser_Avoidance_a1_X3
   - ros2 launch astra_camera astra.launch.xml
 ```
 
@@ -195,8 +195,15 @@ safety distance is crossed. Keep `docker_orchestrator_enabled=false` while
 debugging the camera and Cloud path only.
 
 The default `similarity_search_programs` intentionally starts chassis, lidar,
-and camera only. If you want to use the manual's autonomous lidar avoidance node
-as well, add this line back in your YAML:
+and camera only. The manual's `colorHSV` and `colorTracker` are HSV/color
+tracking demos; they cannot directly track an arbitrary uploaded phone image
+unless their source is changed to consume Cloud's feature/center result. For the
+uploaded-image similarity target, Edge uses Cloud's `center_norm` and publishes
+`/cmd_vel` itself.
+
+The manual's autonomous lidar avoidance node can be useful, but do not enable it
+until you know whether it also publishes `/cmd_vel`. If it does, it may conflict
+with the visual-servo controller:
 
 ```yaml
   - ros2 run icar_laser laser_Avoidance_a1_X3
@@ -204,6 +211,53 @@ as well, add this line back in your YAML:
 
 Avoid running another node that publishes conflicting `/cmd_vel` commands unless
 you have verified its arbitration behavior on the real car.
+
+### Debug Docker Commands On The Car
+
+The commands in `edge.yaml` are likely to need real-car verification because
+Yahboom images often differ in ROS distro, workspace path, package names, and
+topic names. Use this sequence on the Jetson:
+
+```bash
+docker ps -a
+docker start <container_id_or_name>
+docker exec -it <container_id_or_name> bash
+```
+
+Inside the container:
+
+```bash
+printenv ROS_DISTRO
+ls /opt/ros
+find / -maxdepth 4 -name setup.bash 2>/dev/null
+source /opt/ros/foxy/setup.bash
+ros2 pkg list | grep -E 'icar|astra|sllidar|yahboom'
+ros2 node list
+ros2 topic list
+ros2 topic info /cmd_vel
+```
+
+Then validate each candidate command one by one in the foreground:
+
+```bash
+ros2 run icar_bringup Mcnamu_driver_X3
+ros2 launch sllidar_ros2 sllidar_launch.py
+ros2 launch astra_camera astra.launch.xml
+```
+
+If a command only works after sourcing a workspace, put that source command into
+`docker_command_prefix`, for example:
+
+```yaml
+docker_command_prefix: "source /opt/ros/foxy/setup.bash && source /root/yahboomcar_ws/install/setup.bash"
+```
+
+Only after the foreground commands work should you set:
+
+```yaml
+docker_orchestrator_enabled: true
+autodrive_container: "<container_id_or_name>"
+```
 
 ## Message Contract
 

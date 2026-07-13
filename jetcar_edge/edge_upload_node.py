@@ -62,6 +62,7 @@ class EdgeUploadNode(Node):
         self.declare_parameter("reconnect_seconds", 2.0)
         self.declare_parameter("docker_orchestrator_enabled", False)
         self.declare_parameter("docker_executable", "docker")
+        self.declare_parameter("docker_command_prefix", "")
         self.declare_parameter("autodrive_container", "")
         self.declare_parameter(
             "similarity_search_programs",
@@ -174,6 +175,7 @@ class EdgeUploadNode(Node):
             container=str(self.get_parameter("autodrive_container").value).strip(),
             programs=self._read_similarity_search_programs(),
             docker_executable=str(self.get_parameter("docker_executable").value).strip() or "docker",
+            command_prefix=str(self.get_parameter("docker_command_prefix").value).strip(),
             enabled=bool(self.get_parameter("docker_orchestrator_enabled").value),
             on_log=lambda msg: self.get_logger().info(msg),
         )
