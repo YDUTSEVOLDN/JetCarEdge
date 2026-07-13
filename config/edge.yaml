@@ -16,7 +16,7 @@ algorithm_control_topic: /jetcar/algorithm_ids
 app_control_host: 0.0.0.0
 app_control_port: 6001
 frame_server_host: 0.0.0.0
-frame_server_port: 6000
+frame_server_port: 8100
 snapshot_topic: /jetcar/snapshot
 ai_result_topic: /jetcar/ai_result
 emergency_stop_topic: /jetcar/emergency_stop

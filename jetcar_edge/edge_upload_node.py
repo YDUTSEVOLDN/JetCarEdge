@@ -46,7 +46,7 @@ class EdgeUploadNode(Node):
             "cloud_url",
             "",
         )
-        self.declare_parameter("camera_topic", "/camera/image_raw")
+        self.declare_parameter("camera_topic", "/camera/color/image_raw")
         self.declare_parameter("scan_topic", "/scan")
         self.declare_parameter("imu_topic", "/imu/data")
         self.declare_parameter("ai_enable_topic", "/jetcar/ai_enable")
@@ -54,7 +54,7 @@ class EdgeUploadNode(Node):
         self.declare_parameter("app_control_host", "0.0.0.0")
         self.declare_parameter("app_control_port", 6001)
         self.declare_parameter("frame_server_host", "0.0.0.0")
-        self.declare_parameter("frame_server_port", 6000)
+        self.declare_parameter("frame_server_port", 8100)
         self.declare_parameter("snapshot_topic", "/jetcar/snapshot")
         self.declare_parameter("ai_result_topic", "/jetcar/ai_result")
         self.declare_parameter("emergency_stop_topic", "/jetcar/emergency_stop")
@@ -103,6 +103,9 @@ class EdgeUploadNode(Node):
         self._frame_thread = None
         self._latest_jpeg = None
         self._latest_jpeg_lock = threading.Lock()
+        self._camera_frame_count = 0
+        self._last_camera_frame_at = 0.0
+        self._last_camera_status_log_at = 0.0
 
         self._codec = ImageCodec(
             target_width=int(self.get_parameter("image_width").value),
@@ -223,6 +226,7 @@ class EdgeUploadNode(Node):
         self._start_frame_server()
         self._cloud_results.start()
         self.create_timer(0.5, self._on_timer)
+        self.create_timer(5.0, self._log_camera_status)
         self.get_logger().info(
             f"JetCar edge upload node started stream_id={self._stream_id} upload_enabled={self._upload_enabled}"
         )
@@ -294,6 +298,8 @@ class EdgeUploadNode(Node):
         }
 
     def _on_image(self, msg: Image) -> None:
+        self._camera_frame_count += 1
+        self._last_camera_frame_at = time.monotonic()
         now = time.monotonic()
         due = now - self._last_upload_at >= self._upload_interval
         should_upload = self._upload_enabled and due
@@ -350,6 +356,17 @@ class EdgeUploadNode(Node):
 
     def _on_timer(self) -> None:
         self._similarity_controller.tick()
+
+    def _log_camera_status(self) -> None:
+        age = None
+        if self._last_camera_frame_at > 0.0:
+            age = time.monotonic() - self._last_camera_frame_at
+        age_text = "never" if age is None else f"{age:.1f}s ago"
+        self.get_logger().info(
+            f"camera status topic={str(self.get_parameter('camera_topic').value)} "
+            f"frames={self._camera_frame_count} last_frame={age_text} "
+            f"upload_enabled={self._upload_enabled} algorithms={','.join(self._algorithm_ids) or '<none>'}"
+        )
 
     def _start_control_server(self) -> None:
         host = str(self.get_parameter("app_control_host").value).strip()
@@ -423,7 +440,15 @@ class EdgeUploadNode(Node):
             def log_message(self, fmt: str, *args) -> None:
                 node.get_logger().info("frame server: " + fmt % args)
 
-        self._frame_server = ThreadingHTTPServer((host, port), Handler)
+        try:
+            self._frame_server = ThreadingHTTPServer((host, port), Handler)
+        except OSError as exc:
+            self._frame_server = None
+            self._frame_thread = None
+            self.get_logger().warning(
+                f"camera frame HTTP server disabled: {host}:{port} unavailable ({exc})"
+            )
+            return
         self._frame_thread = threading.Thread(
             target=self._frame_server.serve_forever,
             name="jetcar-frame-server",

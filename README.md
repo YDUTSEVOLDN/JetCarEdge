@@ -66,7 +66,7 @@ reference frame:
 ```bash
 cd /path/to/JetCarEdge
 python scripts/upload_mock_camera.py \
-  --cloud http://192.168.137.1:8000 \
+  --cloud http://192.168.175.90:8000 \
   --car-id car_001 \
   --image ../yolov5-7.0/data/images/bus.jpg
 ```
@@ -104,10 +104,10 @@ ros2 run jetcar_edge edge_upload_node \
   --ros-args \
   -p car_id:=car_001 \
   -p stream_id:=camera_front \
-  -p cloud_host:=192.168.137.1 \
+  -p cloud_host:=192.168.175.90 \
   -p cloud_port:=8000 \
   -p algorithm_ids:="[yolov5-manhole-detect,yolov8-road-damage]" \
-  -p camera_topic:=/camera/image_raw \
+  -p camera_topic:=/camera/color/image_raw \
   -p scan_topic:=/scan \
   -p imu_topic:=/imu/data
 ```
@@ -137,19 +137,22 @@ cd /workspace
 source install/setup.bash
 
 ros2 launch jetcar_edge edge_bringup.launch.py \
-  cloud_url:=ws://192.168.137.126:8000/ws/video/car_001/camera_front/edge
+  cloud_url:=ws://192.168.175.90:8000/ws/video/car_001/camera_front/edge
 ```
 
-This starts `astra_camera` and `edge_upload_node` together. It keeps
-`algorithm_ids` empty until the phone sends a mode command, starts the built-in
-frame HTTP server on port `6000`, and keeps Docker orchestration disabled.
+This starts the Yahboom base driver, `astra_camera`, and `edge_upload_node`
+together. It keeps `algorithm_ids` empty until the phone sends a mode command,
+starts the built-in frame HTTP server on port `8100`, and keeps Docker
+orchestration disabled.
 
-If the camera is already running, use:
+If the base driver or camera is already running, disable that part to avoid
+duplicate nodes:
 
 ```bash
 ros2 launch jetcar_edge edge_bringup.launch.py \
+  start_base:=false \
   start_camera:=false \
-  cloud_url:=ws://192.168.137.126:8000/ws/video/car_001/camera_front/edge
+  cloud_url:=ws://192.168.175.90:8000/ws/video/car_001/camera_front/edge
 ```
 
 Manual two-terminal flow, if launch inclusion fails:
@@ -172,10 +175,10 @@ source install/setup.bash
 ros2 run jetcar_edge edge_upload_node --ros-args \
   -p car_id:=car_001 \
   -p stream_id:=camera_front \
-  -p cloud_url:=ws://192.168.137.126:8000/ws/video/car_001/camera_front/edge \
+  -p cloud_url:=ws://192.168.175.90:8000/ws/video/car_001/camera_front/edge \
   -p camera_topic:=/camera/color/image_raw \
   -p algorithm_ids:="" \
-  -p frame_server_port:=6000 \
+  -p frame_server_port:=8100 \
   -p docker_orchestrator_enabled:=false
 ```
 
@@ -186,11 +189,11 @@ the upload URL to `algorithm_ids=yolov5-similarity`.
 The Edge node now also serves the latest camera frame at:
 
 ```text
-GET http://<edge-ip>:6000/api/frame
-GET http://<edge-ip>:6000/frame.jpg
+GET http://<edge-ip>:8100/api/frame
+GET http://<edge-ip>:8100/frame.jpg
 ```
 
-This replaces the old separate `scripts/mock_camera_server.py --port 6000`
+This replaces the old separate `scripts/mock_camera_server.py --port 8100`
 process for real camera runs. The HTTP frame server caches camera frames even
 when AI upload is off, but Cloud upload still starts only after the phone sends
 a non-empty algorithm list.

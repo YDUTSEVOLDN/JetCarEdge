@@ -12,8 +12,20 @@ def generate_launch_description() -> LaunchDescription:
     stream_id = LaunchConfiguration("stream_id")
     cloud_url = LaunchConfiguration("cloud_url")
     camera_topic = LaunchConfiguration("camera_topic")
+    start_base = LaunchConfiguration("start_base")
     start_camera = LaunchConfiguration("start_camera")
     frame_server_port = LaunchConfiguration("frame_server_port")
+
+    base_driver = ExecuteProcess(
+        cmd=[
+            "ros2",
+            "run",
+            "yahboomcar_bringup",
+            "Mcnamu_driver_X3",
+        ],
+        condition=IfCondition(start_base),
+        output="screen",
+    )
 
     camera_launch = ExecuteProcess(
         cmd=[
@@ -55,8 +67,10 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="ws://192.168.175.90:8000/ws/video/car_001/camera_front/edge",
             ),
             DeclareLaunchArgument("camera_topic", default_value="/camera/color/image_raw"),
+            DeclareLaunchArgument("start_base", default_value="true"),
             DeclareLaunchArgument("start_camera", default_value="true"),
-            DeclareLaunchArgument("frame_server_port", default_value="6000"),
+            DeclareLaunchArgument("frame_server_port", default_value="8100"),
+            base_driver,
             camera_launch,
             edge_node,
         ]
