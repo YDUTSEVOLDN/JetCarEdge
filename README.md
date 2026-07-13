@@ -147,12 +147,26 @@ ros2 run jetcar_edge edge_upload_node --ros-args \
   -p stream_id:=camera_front \
   -p cloud_url:=ws://192.168.137.126:8000/ws/video/car_001/camera_front/edge \
   -p camera_topic:=/camera/color/image_raw \
+  -p algorithm_ids:="" \
+  -p frame_server_port:=6000 \
   -p docker_orchestrator_enabled:=false
 ```
 
 `cloud_url` may omit `algorithm_ids`; the node rewrites the query string when
 the phone changes modes. For similarity, the phone/Edge control port will switch
 the upload URL to `algorithm_ids=yolov5-similarity`.
+
+The Edge node now also serves the latest camera frame at:
+
+```text
+GET http://<edge-ip>:6000/api/frame
+GET http://<edge-ip>:6000/frame.jpg
+```
+
+This replaces the old separate `scripts/mock_camera_server.py --port 6000`
+process for real camera runs. The HTTP frame server caches camera frames even
+when AI upload is off, but Cloud upload still starts only after the phone sends
+a non-empty algorithm list.
 
 The node builds this Cloud upload URL automatically:
 

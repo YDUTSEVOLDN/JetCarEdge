@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import base64
 import socketserver
 import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from geometry_msgs.msg import Twist
@@ -38,7 +40,7 @@ class EdgeUploadNode(Node):
         self.declare_parameter("cloud_discovery_service", "JetCarCloud")
         self.declare_parameter(
             "algorithm_ids",
-            ["yolov5-manhole-detect", "yolov8-road-damage"],
+            [],
         )
         self.declare_parameter(
             "cloud_url",
@@ -51,6 +53,8 @@ class EdgeUploadNode(Node):
         self.declare_parameter("algorithm_control_topic", "/jetcar/algorithm_ids")
         self.declare_parameter("app_control_host", "0.0.0.0")
         self.declare_parameter("app_control_port", 6001)
+        self.declare_parameter("frame_server_host", "0.0.0.0")
+        self.declare_parameter("frame_server_port", 6000)
         self.declare_parameter("snapshot_topic", "/jetcar/snapshot")
         self.declare_parameter("ai_result_topic", "/jetcar/ai_result")
         self.declare_parameter("emergency_stop_topic", "/jetcar/emergency_stop")
@@ -95,6 +99,10 @@ class EdgeUploadNode(Node):
         self._snapshot_requested = False
         self._control_server = None
         self._control_thread = None
+        self._frame_server = None
+        self._frame_thread = None
+        self._latest_jpeg = None
+        self._latest_jpeg_lock = threading.Lock()
 
         self._codec = ImageCodec(
             target_width=int(self.get_parameter("image_width").value),
@@ -212,6 +220,7 @@ class EdgeUploadNode(Node):
             on_log=lambda msg: self.get_logger().info(msg),
         )
         self._start_control_server()
+        self._start_frame_server()
         self._cloud_results.start()
         self.create_timer(0.5, self._on_timer)
         self.get_logger().info(
@@ -220,6 +229,7 @@ class EdgeUploadNode(Node):
 
     def destroy_node(self) -> bool:
         self._stop_control_server()
+        self._stop_frame_server()
         self._similarity_controller.stop(reason="node_destroy")
         self._cloud_results.stop()
         self._cloud.stop()
@@ -287,22 +297,27 @@ class EdgeUploadNode(Node):
         now = time.monotonic()
         due = now - self._last_upload_at >= self._upload_interval
         should_upload = self._upload_enabled and due
-        if not should_upload and not self._snapshot_requested:
+        should_cache = self._frame_server is not None
+        if not should_upload and not self._snapshot_requested and not should_cache:
             return
 
-        self._last_upload_at = now
+        snapshot_requested = self._snapshot_requested
+        if should_upload:
+            self._last_upload_at = now
         self._snapshot_requested = False
 
         try:
             encoded = self._codec.encode(msg)
-            frame = VideoFrameUpload(
-                car_id=self._car_id,
-                image=encoded,
-            )
-            self._cloud.submit(frame.to_dict())
-            self.get_logger().info(
-                f"frame queued for cloud upload: {encoded.width}x{encoded.height}"
-            )
+            self._store_latest_jpeg(encoded)
+            if should_upload or snapshot_requested:
+                frame = VideoFrameUpload(
+                    car_id=self._car_id,
+                    image=encoded,
+                )
+                self._cloud.submit(frame.to_dict())
+                self.get_logger().info(
+                    f"frame queued for cloud upload: {encoded.width}x{encoded.height}"
+                )
         except Exception as exc:
             self.get_logger().warning(f"failed to process camera frame: {exc}")
 
@@ -382,6 +397,63 @@ class EdgeUploadNode(Node):
         self._control_server = None
         self._control_thread = None
 
+    def _start_frame_server(self) -> None:
+        host = str(self.get_parameter("frame_server_host").value).strip()
+        port = int(self.get_parameter("frame_server_port").value)
+        if port <= 0:
+            self.get_logger().info("frame HTTP server disabled")
+            return
+        node = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                if self.path.split("?", 1)[0] not in {"/api/frame", "/frame.jpg"}:
+                    self.send_error(404, "not found")
+                    return
+                data = node._latest_jpeg_bytes()
+                if data is None:
+                    self.send_error(503, "no camera frame received yet")
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, fmt: str, *args) -> None:
+                node.get_logger().info("frame server: " + fmt % args)
+
+        self._frame_server = ThreadingHTTPServer((host, port), Handler)
+        self._frame_thread = threading.Thread(
+            target=self._frame_server.serve_forever,
+            name="jetcar-frame-server",
+            daemon=True,
+        )
+        self._frame_thread.start()
+        self.get_logger().info(f"camera frame HTTP server listening on {host}:{port}")
+
+    def _stop_frame_server(self) -> None:
+        if self._frame_server is None:
+            return
+        self._frame_server.shutdown()
+        self._frame_server.server_close()
+        if self._frame_thread is not None:
+            self._frame_thread.join(timeout=2.0)
+        self._frame_server = None
+        self._frame_thread = None
+
+    def _store_latest_jpeg(self, encoded) -> None:
+        try:
+            data = base64.b64decode(encoded.data)
+        except Exception:
+            return
+        with self._latest_jpeg_lock:
+            self._latest_jpeg = data
+
+    def _latest_jpeg_bytes(self):
+        with self._latest_jpeg_lock:
+            return self._latest_jpeg
+
     def _read_algorithm_ids(self) -> list[str]:
         value = self.get_parameter("algorithm_ids").value
         if isinstance(value, str):
@@ -389,7 +461,7 @@ class EdgeUploadNode(Node):
         else:
             items = list(value)
         algorithms = [str(item).strip() for item in items if str(item).strip()]
-        return algorithms or ["yolov8-road-damage"]
+        return algorithms
 
     def _read_similarity_search_programs(self) -> list[DockerProgram]:
         value = self.get_parameter("similarity_search_programs").value

@@ -6,9 +6,7 @@ cloud_discovery_enabled: false
 cloud_discovery_port: 8765
 cloud_discovery_listen_seconds: 2.0
 cloud_discovery_service: JetCarCloud
-algorithm_ids:
-  - yolov5-manhole-detect
-  - yolov8-road-damage
+algorithm_ids: []
 cloud_url: ""
 camera_topic: /camera/image_raw
 scan_topic: /scan
@@ -17,6 +15,8 @@ ai_enable_topic: /jetcar/ai_enable
 algorithm_control_topic: /jetcar/algorithm_ids
 app_control_host: 0.0.0.0
 app_control_port: 6001
+frame_server_host: 0.0.0.0
+frame_server_port: 6000
 snapshot_topic: /jetcar/snapshot
 ai_result_topic: /jetcar/ai_result
 emergency_stop_topic: /jetcar/emergency_stop
