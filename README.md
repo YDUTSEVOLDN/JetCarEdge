@@ -174,7 +174,7 @@ docker_orchestrator_enabled: true
 autodrive_container: "2169"
 docker_command_prefix: "source /opt/ros/foxy/setup.bash"
 similarity_search_programs:
-  - ros2 run icar_bringup Mcnamu_driver_X3
+  - ros2 run yahboomcar_bringup Mcnamu_driver_X3
   - ros2 launch sllidar_ros2 sllidar_launch.py
   - ros2 launch astra_camera astra.launch.xml
 ```
@@ -206,7 +206,7 @@ until you know whether it also publishes `/cmd_vel`. If it does, it may conflict
 with the visual-servo controller:
 
 ```yaml
-  - ros2 run icar_laser laser_Avoidance_a1_X3
+  - ros2 run yahboomcar_laser laser_Avoidance_a1_X3
 ```
 
 Avoid running another node that publishes conflicting `/cmd_vel` commands unless
@@ -240,10 +240,41 @@ ros2 topic info /cmd_vel
 Then validate each candidate command one by one in the foreground:
 
 ```bash
-ros2 run icar_bringup Mcnamu_driver_X3
+ros2 run yahboomcar_bringup Mcnamu_driver_X3
 ros2 launch sllidar_ros2 sllidar_launch.py
 ros2 launch astra_camera astra.launch.xml
 ```
+
+Your `jetcar_auto` container reports `yahboomcar_*` packages, not `icar_*`
+packages, so `ros2 run icar_bringup Mcnamu_driver_X3` is expected to fail with
+`Package 'icar_bringup' not found`. If `/cmd_vel` is unknown before the base
+driver starts, start the driver first and check topics again:
+
+```bash
+ros2 run yahboomcar_bringup Mcnamu_driver_X3
+ros2 topic list
+ros2 topic list | grep -E 'cmd|vel|velocity|joy|car'
+ros2 topic info /cmd_vel
+```
+
+If the real velocity topic is not `/cmd_vel`, update `cmd_vel_topic` in
+`config/edge.yaml`.
+
+To find the original tracking source inside the container, use:
+
+```bash
+ros2 pkg prefix yahboomcar_astra
+ros2 pkg prefix yahboomcar_laser
+ros2 pkg executables yahboomcar_astra
+ros2 pkg executables yahboomcar_laser
+find /workspace /install /root -maxdepth 6 -type f \( -name '*Tracker*' -o -name '*tracker*' -o -name '*HSV*' -o -name '*.py' -o -name '*.cpp' \) 2>/dev/null
+find / -path '*yahboomcar_astra*' -o -path '*yahboomcar_laser*' 2>/dev/null
+```
+
+If `ros2 pkg prefix` points under `/install`, that may be installed artifacts
+only. Prefer editing the matching source under `/workspace/src` if it exists,
+then rebuild the workspace. If only `/install` exists, you may need the original
+image source package or mount your own patched package into the container.
 
 If a command only works after sourcing a workspace, put that source command into
 `docker_command_prefix`, for example:

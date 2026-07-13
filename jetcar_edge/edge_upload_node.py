@@ -67,7 +67,7 @@ class EdgeUploadNode(Node):
         self.declare_parameter(
             "similarity_search_programs",
             [
-                "ros2 run icar_bringup Mcnamu_driver_X3",
+                "ros2 run yahboomcar_bringup Mcnamu_driver_X3",
                 "ros2 launch sllidar_ros2 sllidar_launch.py",
                 "ros2 launch astra_camera astra.launch.xml",
             ],
