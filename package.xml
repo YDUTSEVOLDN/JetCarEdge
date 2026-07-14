@@ -11,7 +11,10 @@
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>action_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>cv_bridge</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_msgs</depend>
   <depend>launch</depend>
   <depend>launch_ros</depend>
 

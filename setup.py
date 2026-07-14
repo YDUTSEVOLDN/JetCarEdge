@@ -14,7 +14,16 @@ setup(
         ("share/" + package_name + "/config", ["config/edge.yaml"]),
         ("share/" + package_name + "/launch", glob("launch/*.launch.py")),
     ],
-    install_requires=["setuptools", "websocket-client", "PyYAML"],
+    install_requires=[
+        "setuptools",
+        "websocket-client",
+        "PyYAML",
+        "requests",
+        "fastapi",
+        "uvicorn",
+        "Pillow",
+        "numpy",
+    ],
     zip_safe=True,
     maintainer="JetCar Team",
     maintainer_email="dev@example.com",
@@ -23,7 +32,7 @@ setup(
     entry_points={
         "console_scripts": [
             "edge_upload_node = jetcar_edge.edge_upload_node:main",
-            "task_orchestrator_node = jetcar_edge.task_orchestrator_node:main",
+            "slam_web_api = jetcar_edge.slam_web_api:main",
         ],
     },
 )

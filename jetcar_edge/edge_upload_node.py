@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import base64
+import os
 import socketserver
 import threading
 import time
@@ -24,6 +25,7 @@ from jetcar_edge.motion_controller import VisualServoConfig, VisualServoControll
 from jetcar_edge.safety import SafetyMonitor
 from jetcar_edge.sensor_buffer import SensorBuffer
 from jetcar_edge.similarity_search_controller import SimilaritySearchConfig, SimilaritySearchController
+from jetcar_edge.video_stream_manager import VideoStreamManager
 from jetcar_edge.ws_client import CloudWsClient
 
 
@@ -108,6 +110,10 @@ class EdgeUploadNode(Node):
         self._camera_frame_count = 0
         self._last_camera_frame_at = 0.0
         self._last_camera_status_log_at = 0.0
+        self._video_stream = VideoStreamManager(
+            port=int(os.getenv("WEB_VIDEO_SERVER_PORT", "8080")),
+            cmd=os.getenv("WEB_VIDEO_SERVER_CMD", "web_video_server --port {port}"),
+        )
 
         self._codec = ImageCodec(
             target_width=int(self.get_parameter("image_width").value),
@@ -243,6 +249,7 @@ class EdgeUploadNode(Node):
     def destroy_node(self) -> bool:
         self._stop_control_server()
         self._stop_frame_server()
+        self._video_stream.stop()
         self._similarity_controller.stop(reason="node_destroy")
         self._cloud_results.stop()
         self._cloud.stop()
@@ -300,6 +307,14 @@ class EdgeUploadNode(Node):
         self.get_logger().info(f"algorithm_ids updated: {','.join(self._algorithm_ids) or '<none>'}")
 
     def _on_app_control(self, payload: dict) -> dict:
+        cmd = str(payload.get("cmd") or "").strip().lower()
+        if cmd == "start_video_stream":
+            status = self._video_stream.start()
+            return {"ok": bool(status.get("ok", False)), "cmd": cmd, "video": status}
+        if cmd == "stop_video_stream":
+            status = self._video_stream.stop()
+            return {"ok": bool(status.get("ok", False)), "cmd": cmd, "video": status}
+
         mode = str(payload.get("mode") or "").strip().lower()
         algorithms = self._algorithms_from_control(payload)
         self._set_ai_algorithms(algorithms, reason="app_control")
