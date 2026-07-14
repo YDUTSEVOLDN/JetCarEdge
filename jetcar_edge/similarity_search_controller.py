@@ -53,6 +53,7 @@ class SimilaritySearchController:
         self._state = "idle"
         self._started_at = 0.0
         self._last_result_at = 0.0
+        self._motion_on_match_only = False
 
     @property
     def active(self) -> bool:
@@ -62,16 +63,19 @@ class SimilaritySearchController:
     def state(self) -> str:
         return self._state
 
-    def start(self) -> None:
+    def start(self, *, motion_on_match_only: bool = False) -> None:
         if self._active:
+            self._motion_on_match_only = motion_on_match_only
             return
         self._active = True
         self._state = "searching"
         self._started_at = time.time()
         self._last_result_at = 0.0
+        self._motion_on_match_only = motion_on_match_only
         if self._config.start_docker_on_search:
             self._orchestrator.start_stack()
-        self._motion.start()
+        if not self._motion_on_match_only:
+            self._motion.start()
         self._publish_event("search_started", {"state": self._state})
         self._on_log("similarity search controller started")
 
@@ -105,6 +109,21 @@ class SimilaritySearchController:
         matched = _as_bool(result.get("matched"))
         similarity = _as_float(result.get("similarity"), 0.0)
         center_norm = result.get("center_norm")
+        if matched and self._motion_on_match_only and not self._motion.active:
+            self._state = "target_locked"
+            self._publish_event(
+                "target_tracking",
+                {
+                    "similarity": similarity,
+                    "center_norm": center_norm,
+                    "motion": {
+                        "motion_state": "pending_visual_servo",
+                        "command": "cancel_nav_then_start_visual_servo",
+                    },
+                },
+            )
+            time.sleep(0.2)
+            self._motion.start()
         motion = self._motion.handle_similarity_result(result)
         self._publish_event(
             "search_result",

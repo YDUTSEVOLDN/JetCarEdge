@@ -263,7 +263,7 @@ class EdgeUploadNode(Node):
             return
         self._set_ai_algorithms(algorithms, reason="ros_algorithm_ids")
         if "yolov5-similarity" in algorithms:
-            self._similarity_controller.start()
+            self._similarity_controller.start(motion_on_match_only=True)
         else:
             self._similarity_controller.stop(reason="ros_algorithm_ids_without_similarity")
 

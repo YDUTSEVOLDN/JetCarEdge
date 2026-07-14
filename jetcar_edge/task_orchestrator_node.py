@@ -48,6 +48,7 @@ class TaskState:
     total: int = 0
     pose: dict[str, float] = field(default_factory=dict)
     last_nav_status: str = ""
+    summary: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -63,6 +64,7 @@ class TaskState:
             "total": self.total,
             "pose": self.pose,
             "last_nav_status": self.last_nav_status,
+            "summary": self.summary,
         }
 
 
@@ -128,7 +130,9 @@ class TaskOrchestratorNode(Node):
         self._task_thread: Optional[threading.Thread] = None
         self._current_goal_handle = None
         self._pose: dict[str, float] = {}
+        self._visual_servo_takeover = threading.Event()
         self._waypoint_sets = self._load_waypoints()
+        self._task_summary: dict[str, Any] = {}
         self._server = None
         self._server_thread = None
 
@@ -170,6 +174,7 @@ class TaskOrchestratorNode(Node):
             is_search_task = self._state.active and self._state.mode == "similarity_search_task"
         if not is_search_task:
             return
+        self._visual_servo_takeover.set()
         self._cancel_nav_goal()
         self._update_state(
             status="visual_servo",
@@ -226,6 +231,17 @@ class TaskOrchestratorNode(Node):
         mode = str(payload.get("mode") or payload.get("type") or "").strip().lower()
         if mode in {"status", "task_status"}:
             return {"ok": True, "state": self._snapshot_state()}
+        if mode in {"waypoints", "list_waypoints"}:
+            return {"ok": True, "waypoints": self._waypoint_sets}
+        if mode in {"set_waypoints", "update_waypoints"}:
+            name = str(payload.get("name") or payload.get("set") or "").strip()
+            if not name:
+                raise ValueError("set_waypoints requires name")
+            waypoints = payload.get("waypoints")
+            if not isinstance(waypoints, list):
+                raise ValueError("set_waypoints requires waypoints list")
+            self._waypoint_sets[name] = [item for item in waypoints if isinstance(item, dict)]
+            return {"ok": True, "name": name, "count": len(self._waypoint_sets[name])}
         if mode in {"stop", "stop_task", "cancel"}:
             self._cancel_active_task("app_stop")
             return {"ok": True, "state": self._snapshot_state()}
@@ -251,6 +267,12 @@ class TaskOrchestratorNode(Node):
             raise ValueError(f"{mode} requires at least one waypoint")
         self._cancel_active_task("new_task")
         self._task_cancel.clear()
+        self._visual_servo_takeover.clear()
+        self._task_summary = {
+            "visited": [],
+            "failed": [],
+            "started_at": time.time(),
+        }
         task_id = f"{mode}-{int(time.time() * 1000)}"
         with self._state_lock:
             self._state = TaskState(
@@ -307,18 +329,47 @@ class TaskOrchestratorNode(Node):
                 )
                 nav = self._navigate_to(waypoint)
                 if not nav["ok"]:
+                    if mode == "similarity_search_task" and nav.get("status") == "visual_servo_takeover":
+                        return
+                    self._task_summary["failed"].append(
+                        {
+                            "index": index,
+                            "label": waypoint.label,
+                            "x": waypoint.x,
+                            "y": waypoint.y,
+                            "yaw": waypoint.yaw,
+                            "error": nav.get("error", ""),
+                            "status": nav.get("status", ""),
+                            "pose": dict(self._pose),
+                            "time": time.time(),
+                        }
+                    )
                     self._update_state(status="failed", message=nav["error"], last_nav_status=nav.get("status", ""))
                     if bool(self.get_parameter("stop_on_nav_failure").value):
                         self._publish_algorithms([])
                         self._publish_stop()
                         return
+                else:
+                    self._task_summary["visited"].append(
+                        {
+                            "index": index,
+                            "label": waypoint.label,
+                            "x": waypoint.x,
+                            "y": waypoint.y,
+                            "yaw": waypoint.yaw,
+                            "pose": dict(self._pose),
+                            "time": time.time(),
+                        }
+                    )
                 if waypoint.hold_seconds > 0 and not self._task_cancel.is_set():
                     self._update_state(status="holding", message=f"hold {waypoint.hold_seconds:.1f}s")
                     self._sleep_interruptible(waypoint.hold_seconds)
 
             if mode == "similarity_search_task":
+                self._task_summary["finished_navigation_at"] = time.time()
                 self._update_state(status="visual_search", message="waypoints finished; Edge visual servo continues if target is matched")
             else:
+                self._task_summary["finished_at"] = time.time()
                 self._publish_algorithms([])
                 self._publish_stop()
                 self._update_state(status="completed", message="task completed", active=False)
@@ -356,6 +407,8 @@ class TaskOrchestratorNode(Node):
             if self._task_cancel.is_set():
                 self._cancel_nav_goal()
                 return {"ok": False, "error": "navigation cancelled", "status": "cancelled"}
+            if self._visual_servo_takeover.is_set():
+                return {"ok": False, "error": "visual servo takeover", "status": "visual_servo_takeover"}
             if time.monotonic() - started > timeout:
                 self._cancel_nav_goal()
                 return {"ok": False, "error": "navigation timeout", "status": "timeout"}
@@ -405,6 +458,7 @@ class TaskOrchestratorNode(Node):
                 if hasattr(self._state, key):
                     setattr(self._state, key, value)
             self._state.pose = dict(self._pose)
+            self._state.summary = dict(self._task_summary)
             self._state.updated_at = time.time()
         self._publish_state()
 
